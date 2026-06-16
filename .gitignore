@@ -1,0 +1,5 @@
+# Ignore ModelSim compilation folders
+work/
+transcript
+vsim.wlf
+*.mpf
