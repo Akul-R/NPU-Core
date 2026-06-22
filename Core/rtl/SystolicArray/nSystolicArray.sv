@@ -1,4 +1,4 @@
-/*nxm Systolic Array
+/*nxm Systolic Array V2.0
 Components: rows x cols grid of MAC Units, Memory Unit to store and load W and B
 Parameters:
     n :         multiplier bit size
@@ -13,6 +13,10 @@ Inputs:
 
 Outputs: 
     [m-1:0] Y [cols-1:0]            (Output Activation)
+
+Version History:
+    V1.0: standard systolic array module
+    V2.0: Updated to have delay registers to make pipelining easier
 */
 
 module n_systolicArray #(
@@ -33,14 +37,47 @@ module n_systolicArray #(
     //Internal wire Meshes
     logic [n-1:0] inp_mesh [rows-1:0][cols:0]; //passes the input across to horizontal MACs
     logic [m-1:0] sum_mesh [rows:0][cols-1:0]; //passes partial sums to vertical MACs
+    logic [n-1:0] inp_delay [rows-1:0];
+
+    //creating the delay chains based on the row
+    generate
+        genvar i, j;
+
+        for(i = 0; i < rows; i++) begin
+            if(i == 0) begin
+                //first row needs zero delay
+                assign inp_delay[0] = X[0];
+            end
+            else begin
+                //each row (i) needs a delay of i cycles
+                logic [n-1:0] delay_reg [i-1:0];
+
+                always_ff @(posedge clk) begin
+                    if(!n_rst) begin
+                        for(int k = 0; k < i; k++) begin
+                            delay_reg[k] <= 0;
+                        end
+                    end
+                    else begin
+                        delay_reg[0] <= X[i];
+                        for(int k = 1; k < i; k++) begin
+                            delay_reg[k] <= delay_reg[k-1];
+                        end
+                    end
+                end
+
+                assign inp_delay[i] = delay_reg[i-1];
+            end
+        end
+    endgenerate
+
 
     //hookup module IO to internal meshes
     generate
-        genvar i;
 
         //assign the first column of the input mesh to the inputs X
         for(i = 0; i < rows; i++) begin
-            assign inp_mesh[i][0] = X[i];
+            assign inp_mesh[i][0] = inp_delay[i];
         end
 
         //assign the first row of the sum mest to the bias B
@@ -56,13 +93,11 @@ module n_systolicArray #(
 
 
     generate
-        genvar j;
-
         for(i = 0; i < rows; i++) begin
             for(j = 0; j < cols; j++) begin
                 n_MAC #(
                     .n(n),
-                    .m(12)
+                    .m(m)
                 ) MAC_inst (
                     .A(inp_mesh[i][j]),     //A: Input X0:Xn
                     .B(W[i][j]),            //B: Static Weights from matrix
