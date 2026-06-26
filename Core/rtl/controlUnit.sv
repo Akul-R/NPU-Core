@@ -42,7 +42,7 @@ module control_unit #(
 
     state_t current_state, next_state;
 
-    logic [4:0] pc;                 //program counter, will upgrade to a FIFO in future
+    logic [4:0] pc;                 //program counter
     logic [4:0] cycle_counter;      //counts the number of cycles since start of operation
     logic [4:0] inp_stream_len;     //how many n bit inputs are to be processed
     logic [4:0] inp_addr_counter;   //tracks current address of input memory
@@ -55,19 +55,38 @@ module control_unit #(
 
     assign i_addr = pc;
 
-    always_ff @(posedge clk or negedge n_rst) begin
-        if(!n_rst) begin
-            current_state <= RESET;
-        end
-        else begin
-            current_state <= next_state;
-        end
+    always_comb begin
+        next_state = current_state;
+        
+        case (current_state)
+            RESET: next_state = FETCH;
+            
+            FETCH: next_state = DECODE;
+            
+            DECODE: begin
+                case (opcode)
+                    3'b001:  next_state = FETCH; 
+                    3'b010:  next_state = FETCH;   
+                    3'b011:  next_state = EXECUTE; 
+                    3'b100:  next_state = HALTED;
+                    default: next_state = FETCH;
+                endcase
+            end
+            
+            EXECUTE: begin
+                if (done) next_state = FETCH;
+                else               next_state = EXECUTE;
+            end
+            
+            HALTED: next_state = HALTED;
+        endcase
     end
 
     //next state logic
     always_ff @(posedge clk or negedge n_rst) begin
         if(!n_rst) begin
-            //set everything to 0 essentially (reset)
+            //set everything to 0 (reset)
+            current_state <= RESET;
             pc <= 0;
             cycle_counter <= 0;
             array_n_rst <= 0;
@@ -78,79 +97,68 @@ module control_unit #(
             bias_read_en <= 0;
 
             done <= 0;
-            next_state = RESET;
         end
         else begin
+            current_state <= next_state;
             case(current_state)
-                RESET: begin
+                (RESET): begin
                     pc <= 0;
                     inp_addr_counter <= 0;
-                    next_state <= FETCH;
                 end
 
-                FETCH: begin
+                (FETCH): begin
                     done <= 0;
-                    next_state <= DECODE;
                 end
 
-                DECODE: begin
+                (DECODE): begin
                     case(opcode)
                         3'b001: begin //load weights
                             weight_read_en <= 1;
                             pc <= pc + 1;
-                            next_state <= FETCH;
                         end
 
                         3'b010: begin //load biases
                             bias_read_en <= 1;
                             pc <= pc + 1;
-                            next_state <= FETCH;
                         end
 
                         3'b011: begin //execute with inputs
+                            weight_read_en <= 0;
+                            bias_read_en <= 0;
                             inp_stream_len <= argument;
                             inp_read_addr <= 0;
                             inp_read_en <= 1;
                             array_n_rst <= 1;
-                            next_state <= EXECUTE;
                         end
 
                         3'b100: begin //halted
-                            next_state <= HALTED;
+                            pc <= pc;
                         end
 
                         default: begin //no op, idle state
                             pc <= pc + 1;
-                            next_state <= FETCH;
                         end
                     endcase
                 end
 
-                EXECUTE: begin
+                (EXECUTE): begin
                     weight_read_en <= 0;
                     bias_read_en <= 0;
 
-                    if(cycle_counter < (inp_stream_len*rows)) begin
-                        inp_read_addr <= inp_addr_counter;
+                    if(cycle_counter < inp_stream_len) begin
+                        inp_read_addr <= inp_addr_counter*rows;
                         inp_addr_counter <= inp_addr_counter + 1;
                         cycle_counter <= cycle_counter + 1;
-                        next_state <= EXECUTE;
                     end
                     else begin
+                        inp_addr_counter <= 0;
+                        inp_read_addr <= 0;
                         done <= 1;
                         inp_read_en <= 0;
                         pc <= pc + 1;
-                        next_state <= FETCH;
                     end
                 end
 
-                HALTED: begin
-                    next_state <= HALTED;
-                end
-
-                default: begin
-                    next_state <= RESET;
-                end
             endcase
         end
     end
