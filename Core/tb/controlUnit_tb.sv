@@ -6,7 +6,7 @@ module control_unit_tb();
 
     logic clk;
     logic n_rst;
-
+    
     logic [4:0] i_addr;
     logic [7:0] i_data;
 

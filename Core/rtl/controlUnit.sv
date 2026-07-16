@@ -4,17 +4,22 @@ Description:
     accordingly. Will be based on an FSM. This control unit is for a weight
     stationary design (weights loaded in initially and remain static).
 Components:
-    Will have a simple instruction set to do different operations. Instructions
-    are 8 bits long with a 3 bit opcode and 5 bit address.
+    Will have a simple instruction set to do different operations.
     Interfaces with memory for activations (inp), weights and biases.
+Version History:
+    V1.0: Simple Instruction set with 4 recognised opcodes (LDW, LDB, EX, HALT).
+        Supports 8 bit instructions (3 bit opcode, 5 bit address).
+    V1.1: Added a core_en control signal that freezes the control unit and array
 */
 
 module control_unit #(
-    parameter rows = 4
+    parameter rows = 4,
+    parameter pc_depth = 5
 )
 (
     input logic clk,
     input logic n_rst,
+    input logic core_en,
 
     //connections to Instruction Mem (I-MEM)
     output logic [4:0] i_addr,
@@ -42,7 +47,7 @@ module control_unit #(
 
     state_t current_state, next_state;
 
-    logic [4:0] pc;                 //program counter
+    logic [pc_depth-1:0] pc;        //program counter
     logic [4:0] cycle_counter;      //counts the number of cycles since start of operation
     logic [4:0] inp_stream_len;     //how many n bit inputs are to be processed
     logic [4:0] inp_addr_counter;   //tracks current address of input memory
@@ -59,7 +64,10 @@ module control_unit #(
         next_state = current_state;
         
         case (current_state)
-            RESET: next_state = FETCH;
+            RESET: begin
+                if(core_en) next_state = FETCH;
+                else next_state = RESET;
+            end
             
             FETCH: next_state = DECODE;
             
@@ -83,7 +91,7 @@ module control_unit #(
     end
 
     //next state logic
-    always_ff @(posedge clk or negedge n_rst) begin
+    always_ff @(posedge clk) begin
         if(!n_rst) begin
             //set everything to 0 (reset)
             current_state <= RESET;
@@ -152,7 +160,6 @@ module control_unit #(
                     end
                     else begin
                         inp_addr_counter <= 0;
-                        inp_read_addr <= 0;
                         done <= 1;
                         inp_read_en <= 0;
                         pc <= pc + 1;
