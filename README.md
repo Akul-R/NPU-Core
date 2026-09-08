@@ -3,7 +3,7 @@
 Continuing the Systolic Array Project by building on chip, dedicated memory buffers and a programmable control unit. The end goal is to synthesize the design onto an FPGA and interface it with a host computer over a serial interface to execute matrix operations
 
 ## Introduction
-![Draft Design of NPU Core Architecture](docs/NPU_design.png)
+![Draft Design of NPU Core Architecture](Core/docs/NPU_design.png)
 
 Above is a block diagram draft of the NPU Core design (it is still a work in progress so some things may change). The design features separated memory for instructions and data as well as buffers for Weights, Biases and Activations (outputs of the systolic array). There will be additional components such as a Serial Transmitter for communication with the host device or a DMA controller to allow for data transmitted from the host to be directly written to the main memory but these will be implemented later after the basic infrastructure is created.
 
